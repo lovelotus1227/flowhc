@@ -1,0 +1,33 @@
+seed: 0
+results_path: "{YOUR_PATH}/{RUN_NAME}"
+load_from: /data/Sth-Comp/iccv_reproduce/final-base-single_rank/ckpt/epoch-45.pt
+
+data:
+  _target_: "dataset.comp_video_dataset.CompositionVideoDataset"
+  params:
+    root: "/data/Sth-Comp/frames" # example
+    split: "compositional-split-natural"
+    frames_duration: 8
+
+model:
+  _target_: "modules.model.MCR2CVL"
+  params:
+    emb_dim: 300
+    feat_dim: 768
+    num_heads: 24
+    num_latents: 128
+    num_layers: 6
+    eta: 0.1
+    feat_extractor: "swin_tiny"
+
+train:
+  batch_size: 64
+  warmup: 3
+  epochs: 50
+  com_lr: 0.00025
+  com_wd: 0.00005
+  ve_lr: 0.0002
+  ve_wd: 0.00005
+  cosine_scale: 100
+  eval_freq: 10
+  eval_ts: 45
