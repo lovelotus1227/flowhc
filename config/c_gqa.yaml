@@ -1,0 +1,38 @@
+seed: 0
+results_path: "/home/ubuntu/wisdom1/jiangwen/ZSCAR/model/CRR/CRRmodel-cqqaclip"
+# load_from: /home/ubuntu/wisdom1/jiangwen/ZSCAR/model/CRR/CRRmodel/ckpt/epoch-45.pt
+load_from: null
+
+
+data:
+  _target_: "dataset.comp_image_dataset.CompositionImageDataset"
+  params:
+    root: "/home/ubuntu/sdb/CZSL/cgqa"
+    split: "compositional-split-natural"
+
+model:
+  _target_: "modules.model1.MCR2CVL"
+  params:
+    emb_dim: 300
+    feat_dim: 768
+    num_heads: 24
+    num_latents: 128
+    num_layers: 6
+    eta: 0.1
+    feat_extractor: "clip"
+    emb_init: "clip"
+    static_inp: False
+    train_only: True  # closed-world
+    is_image: True
+
+train:
+  batch_size: 64
+  warmup: 3
+  epochs: 50
+  com_lr: 0.00025
+  com_wd: 0.00005
+  ve_lr: 0.0002
+  ve_wd: 0.00005
+  cosine_scale: 100
+  eval_freq: 5
+  eval_ts: 45

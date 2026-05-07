@@ -1,1 +1,51 @@
+# Python caches
 __pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+CRRvenv/
+
+# Build/package artifacts
+build/
+dist/
+*.egg-info/
+
+# Test/type/lint caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.ipynb_checkpoints/
+
+# Local environment files
+.env
+.env.*
+!.env.example
+
+# OS/editor files
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Logs and experiment outputs
+*.log
+logs/
+outputs/
+runs/
+wandb/
+mlruns/
+checkpoints/
+
+# Model weights and exported artifacts
+*.ckpt
+*.pt
+*.pth
+*.safetensors
+*.onnx

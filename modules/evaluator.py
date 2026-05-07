@@ -45,7 +45,6 @@ class Evaluator:
                             for attr, obj in dset.train_pairs]
         self.pairs = torch.LongTensor(pairs)
 
-
         # Mask over pairs that occur in closed world
         # Select set based on phase
         if dset.phase == 'train':
@@ -58,12 +57,12 @@ class Evaluator:
             test_pair_gt = set(dset.val_pairs)
         else:
             print('Evaluating with test pairs')
-            test_pair_set = set(dset.test_pairs + dset.train_pairs+dset.ex_test_pairs)
-            test_pair_gt = set(dset.test_pairs+dset.ex_test_pairs)
+            test_pair_set = set(dset.test_pairs + dset.train_pairs )
+            test_pair_gt = set(dset.test_pairs)
 
         self.test_pair_dict = [
             (dset.attr2idx[attr],
-             dset.obj2idx[obj]) for attr,obj in test_pair_gt]
+             dset.obj2idx[obj]) for attr, obj in test_pair_gt]
 
         self.test_pair_dict = dict.fromkeys(self.test_pair_dict, 0)
 
@@ -80,7 +79,7 @@ class Evaluator:
             masks = [1 if pair in test_pair_set else 0 for pair in dset.pairs]
 
         # masks = [1 if pair in test_pair_set else 0 for pair in dset.pairs]
-        
+
         self.closed_mask = torch.BoolTensor(masks)
         # Mask of seen concepts
         seen_pair_set = set(dset.train_pairs)
@@ -131,21 +130,23 @@ class Evaluator:
         # Unbiased setting
 
         # Open world setting --no mask, all pairs of the dataset
-        results.update({"open": get_pred_from_scores(scores, topk)})# only account unseen
+        results.update({"open": get_pred_from_scores(scores, topk)})  # only account unseen
         results.update(
             {"unbiased_open": get_pred_from_scores(orig_scores, topk)}
-        ) #only account unseen
+        )  # only account unseen
         # Closed world setting - set the score for all Non test pairs to -1e10,
         # this excludes the pairs from set not in evaluation
-        mask = self.closed_mask.repeat(scores.shape[0], 1) #mask= train_pair+unseen_pair(in test)
+        mask = self.closed_mask.repeat(scores.shape[0], 1)  # mask= train_pair+unseen_pair(in test)
         closed_scores = scores.clone()
-        closed_scores[~mask] = -1e10 # only consider the train and test pairs; when val and test have overlapped categories, it is also okay.
+        closed_scores[
+            ~mask] = -1e10  # only consider the train and test pairs; when val and test have overlapped categories, it is also okay.
         closed_orig_scores = orig_scores.clone()
         closed_orig_scores[~mask] = -1e10  # only consider the train and test pairs
-        results.update({"closed": get_pred_from_scores(closed_scores, topk)}) #
+        results.update({"closed": get_pred_from_scores(closed_scores, topk)})  #
         results.update(
-            {"unbiased_closed": get_pred_from_scores(closed_orig_scores, topk)} #unbiased_closed, used to calculate the
-        ) # closed_orig_scores => num_video x num_action_class
+            {"unbiased_closed": get_pred_from_scores(closed_orig_scores, topk)}
+            # unbiased_closed, used to calculate the
+        )  # closed_orig_scores => num_video x num_action_class
 
         return results
 
@@ -208,7 +209,7 @@ class Evaluator:
         # largest values
         pair_pred = pair_pred.contiguous().view(-1)
         attr_pred, obj_pred = self.pairs[pair_pred][:, 0].view(-1, topk), \
-                              self.pairs[pair_pred][:, 1].view(-1, topk)
+            self.pairs[pair_pred][:, 1].view(-1, topk)
 
         results.update({'closed': (attr_pred, obj_pred)})
         return results
@@ -282,12 +283,12 @@ class Evaluator:
         stats = dict()
 
         # Closed world
-        closed_scores = _process(predictions["closed"])# only unseen
-        unbiased_closed = _process(predictions["unbiased_closed"]) # unseen and seen (only train and test)
+        closed_scores = _process(predictions["closed"])  # only unseen
+        unbiased_closed = _process(predictions["unbiased_closed"])  # unseen and seen (only train and test)
         _add_to_dict(closed_scores, "closed", stats)
         _add_to_dict(unbiased_closed, "closed_ub", stats)
 
-        unbiased_open = _process(predictions["unbiased_open"]) # unseen and seen (only train and test)
+        unbiased_open = _process(predictions["unbiased_open"])  # unseen and seen (only train and test)
         _add_to_dict(unbiased_open, "open_ub", stats)
 
         # Calculating AUC
@@ -299,7 +300,7 @@ class Evaluator:
 
         # Getting top predicted score for these unseen classes
         max_seen_scores = predictions['scores'][unseen_ind][:, self.seen_mask].topk(topk, dim=1)[
-                              0][:, topk - 1] #
+                              0][:, topk - 1]  #
 
         # Getting difference between these scores
         unseen_score_diff = max_seen_scores - correct_scores
@@ -416,14 +417,23 @@ def predict_logits(model, dataset, cfg):
             batch_target = data[3].cuda()
             # if config.framework == 'vlm':
 
+            #print(batch_img.shape)
+            #  b, 8, 3, 224, 224    b,3,224,224
+
             predict = model(batch_img, pairs.repeat(torch.cuda.device_count(), 1))  # (B, N_action)
             # else:
             #     predict = model(batch_img, pairs.repeat(torch.cuda.device_count(),1))
 
+            #print(predict.shape)
+            # b, 10248   b,15534
+
             logits = predict
-            # print(logits.shape)
-            # print(batch_target.shape)
+            #print(logits.shape)
+            # b, 10248 b,15534
+            #print(batch_target.shape)
+            # b b
             loss += loss_fn(predict, batch_target)
+            #print(loss)
 
             attr_truth, obj_truth, pair_truth = data[1], data[2], data[3]
             logits = logits.cpu()
@@ -437,7 +447,8 @@ def predict_logits(model, dataset, cfg):
         torch.cat(all_obj_gt).to("cpu"),
         torch.cat(all_pair_gt).to("cpu"),
     )
-
+    #print(all_attr_gt.shape, all_obj_gt.shape, all_pair_gt.shape)
+    #                 5089 5089 5089
     return all_logits, all_attr_gt, all_obj_gt, all_pair_gt, loss / len(dataloader)
 
 
@@ -499,14 +510,14 @@ def test(
     predictions = {
         pair_name: all_logits[:, i]
         for i, pair_name in enumerate(test_dataset.pairs)
-    } # (action class name -> num_videos)
+    }  # (action class name -> num_videos)
     all_pred = [predictions]
 
     all_pred_dict = {}
     for k in all_pred[0].keys():
         all_pred_dict[k] = torch.cat(
             [all_pred[i][k] for i in range(len(all_pred))]
-        ).float() # for multiple datasets
+        ).float()  # for multiple datasets
 
     results = evaluator.score_model(
         all_pred_dict, all_obj_gt, bias=1e3, topk=1
@@ -536,12 +547,12 @@ def test(
     stats['attr_acc_open'] = attr_acc_open
     stats['obj_acc_open'] = obj_acc_open
 
-    stats['ub_seen']=stats['closed_ub_seen_match']
-    stats['ub_unseen']=stats['closed_ub_unseen_match']
-    stats['ub_all']=stats['closed_ub_match']
+    stats['ub_seen'] = stats['closed_ub_seen_match']
+    stats['ub_unseen'] = stats['closed_ub_unseen_match']
+    stats['ub_all'] = stats['closed_ub_match']
 
-    stats['ub_open_seen']=stats['open_ub_seen_match']
-    stats['ub_open_unseen']=stats['open_ub_unseen_match']
-    stats['ub_open_all']=stats['open_ub_match']
+    stats['ub_open_seen'] = stats['open_ub_seen_match']
+    stats['ub_open_unseen'] = stats['open_ub_unseen_match']
+    stats['ub_open_all'] = stats['open_ub_match']
 
     return stats

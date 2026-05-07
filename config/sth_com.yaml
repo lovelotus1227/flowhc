@@ -1,0 +1,48 @@
+seed: 0
+results_path: /home/ubuntu/wisdom1/jiangwen/ZSCAR/model/FlowHC/clip-test
+load_from: null
+data:
+  _target_: dataset.comp_video_dataset.CompositionVideoDataset
+  params:
+    root: /home/ubuntu/wisdom1/jiangwen/dataset/Sth-com/frames
+    split: compositional-split-natural
+    frames_duration: 8
+model:
+  _target_: modules.model.MCR2CVL
+  params:
+    emb_dim: 300
+    feat_dim: 768
+    num_heads: 24
+    num_latents: 128
+    num_layers: 6
+    eta: 0.1
+    num_frames: 8
+    composer_type: gated
+    composer_hidden_dim: null
+    composer_dropout: 0.1
+    feat_extractor: clip
+    emb_init: clip
+    static_inp: false
+    train_only: true
+    is_image: false
+    lambda_flow: 0.1
+    lambda_comp: 0.1
+    lambda_leak: 0.0
+    lambda_guide: 0.05
+    lambda_hyper_comp: 0.05
+    lambda_hyper_contrast: 0.02
+train:
+  batch_size: 64
+  warmup: 3
+  epochs: 50
+  com_lr: 0.00025
+  com_wd: 5.0e-05
+  ve_lr: 0.0002
+  ve_wd: 5.0e-05
+  clip_com_lr: 0.00015
+  clip_com_wd: 5.0e-05
+  clip_aim_lr: 0.0002
+  clip_aim_wd: 5.0e-05
+  cosine_scale: 100
+  eval_freq: 10
+  eval_ts: 45
