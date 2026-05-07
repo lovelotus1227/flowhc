@@ -46,7 +46,8 @@ class HyperProjector(nn.Module):
 
         h_comp_mobius = self.manifold.mobius_add(h_v, h_o)
         if hasattr(self.manifold, "mobius_scalar_mul"):
-            h_comp_mobius = self.manifold.mobius_scalar_mul(0.5, h_comp_mobius)
+            scale = h_comp_mobius.new_tensor(0.5)
+            h_comp_mobius = self.manifold.mobius_scalar_mul(scale, h_comp_mobius)
         h_comp_mobius = self.manifold.projx(h_comp_mobius)
         h_comp_target = self.to_hyperbolic(0.5 * (z_v + z_o), self.hyper_comp_proj)
 
