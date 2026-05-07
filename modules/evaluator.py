@@ -390,6 +390,7 @@ def predict_logits(model, dataset, cfg):
             pair attribute-object labels
     """
     model.eval()
+    device = next(model.parameters()).device
     all_attr_gt, all_obj_gt, all_pair_gt = (
         [],
         [],
@@ -399,8 +400,10 @@ def predict_logits(model, dataset, cfg):
     obj2idx = dataset.obj2idx
     # print(text_rep.shape)
     pairs_dataset = dataset.pairs
-    pairs = torch.tensor([(attr2idx[attr], obj2idx[obj])
-                          for attr, obj in pairs_dataset]).cuda()
+    pairs = torch.tensor(
+        [(attr2idx[attr], obj2idx[obj]) for attr, obj in pairs_dataset],
+        device=device,
+    )
     dataloader = DataLoader(
         dataset,
         batch_size=32,
@@ -413,14 +416,14 @@ def predict_logits(model, dataset, cfg):
         for idx, data in tqdm(
                 enumerate(dataloader), total=len(dataloader), desc="Testing"
         ):
-            batch_img = data[0].cuda()
-            batch_target = data[3].cuda()
+            batch_img = data[0].to(device)
+            batch_target = data[3].to(device)
             # if config.framework == 'vlm':
 
             #print(batch_img.shape)
             #  b, 8, 3, 224, 224    b,3,224,224
 
-            predict = model(batch_img, pairs.repeat(torch.cuda.device_count(), 1))  # (B, N_action)
+            predict = model(batch_img, pairs)  # (B, N_action)
             # else:
             #     predict = model(batch_img, pairs.repeat(torch.cuda.device_count(),1))
 

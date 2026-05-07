@@ -157,9 +157,9 @@ class MCR2CVL(nn.Module):
             attrs = [dset.attr2idx[attr] for attr in attrs]
             objs = [dset.obj2idx[obj] for obj in objs]
             pairs = [a for a in range(len(relevant_pairs))]
-            attrs = torch.Tensor(attrs)
-            objs = torch.Tensor(objs)
-            pairs = torch.Tensor(pairs)
+            attrs = torch.LongTensor(attrs)
+            objs = torch.LongTensor(objs)
+            pairs = torch.LongTensor(pairs)
             return attrs, objs, pairs
 
         val_attrs, val_objs, val_pairs = get_all_ids(self.dset.pairs)
@@ -353,19 +353,19 @@ class MCR2CVL(nn.Module):
 
         loss_comp = F.mse_loss(z_comp, (z_v_mean + z_o_mean) * 0.5)
 
-        loss_leak = 0.0
+        loss_leak = z_v_mean.new_tensor(0.0)
         if self.lambda_leak > 0:
             loss_leak = self.flow_matching.leakage_flow_match(z_v, z_o)
 
-        loss_guide = 0.0
+        loss_guide = z_v_mean.new_tensor(0.0)
         if self.lambda_guide > 0:
             loss_guide = self.flow_matching.bilateral_guide_loss(z_v_mean, z_o_mean)
 
-        loss_hyper_comp = 0.0
+        loss_hyper_comp = z_v_mean.new_tensor(0.0)
         if self.lambda_hyper_comp > 0:
             loss_hyper_comp = self.hyper_projector.hyper_composition_loss(z_v_mean, z_o_mean)
 
-        loss_hyper_contrast = 0.0
+        loss_hyper_contrast = z_v_mean.new_tensor(0.0)
         if self.lambda_hyper_contrast > 0:
             loss_hyper_contrast = self.hyper_projector.hyper_contrastive_loss(z_v_mean, z_o_mean)
 

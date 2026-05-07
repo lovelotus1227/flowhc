@@ -113,9 +113,7 @@ class Trainer:
                     loss_com = self.loss_fn(pred_com_train * cfg.train.cosine_scale, batch_target)
 
                     # 总损失：原始损失 + 额外损失（additional_loss 已经包含了所有权重）
-                    loss = loss_com + 0.2 * (loss_verb + loss_obj)
-                    if additional_loss != 0.0:
-                        loss = loss + additional_loss
+                    loss = loss_com + 0.2 * (loss_verb + loss_obj) + additional_loss
                     accelerator.backward(loss)
                     # ====================== 真实梯度检查 ======================
                     # if step == 0:  # 只打印第一步，避免刷屏
@@ -133,11 +131,10 @@ class Trainer:
                     self.writer.add_scalar("train/loss_obj", loss_obj.item(), epoch * len(self.train_dataloader) + step)
                     self.writer.add_scalar("train/loss_comp", loss_com.item(),
                                            epoch * len(self.train_dataloader) + step)
-                    if additional_loss != 0.0:
-                        self.writer.add_scalar("train/loss_additional",
-                                               additional_loss.item() if isinstance(additional_loss,
-                                                                                    torch.Tensor) else additional_loss,
-                                               epoch * len(self.train_dataloader) + step)
+                    self.writer.add_scalar("train/loss_additional",
+                                           additional_loss.item() if isinstance(additional_loss,
+                                                                                torch.Tensor) else additional_loss,
+                                           epoch * len(self.train_dataloader) + step)
                     self.writer.add_scalar("train/lr", self.optimizer.param_groups[0]["lr"],
                                            epoch * len(self.train_dataloader) + step)
 
