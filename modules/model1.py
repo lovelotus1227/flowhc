@@ -82,8 +82,7 @@ class MCR2CVL(nn.Module):
             dset,
             lambda_flow=0.1,
             lambda_comp=0.1,
-            lambda_leak=0.0,
-            lambda_guide=0.05,
+            lambda_orth=0.03,
             lambda_hyper_comp=0.05,
             lambda_hyper_contrast=0.02,
             composer_type="gated",
@@ -93,8 +92,7 @@ class MCR2CVL(nn.Module):
         super(MCR2CVL, self).__init__()
         self.lambda_flow = lambda_flow
         self.lambda_comp = lambda_comp
-        self.lambda_leak = lambda_leak
-        self.lambda_guide = lambda_guide
+        self.lambda_orth = lambda_orth
         self.lambda_hyper_comp = lambda_hyper_comp
         self.lambda_hyper_contrast = lambda_hyper_contrast
         print("Building image FlowHC model")
@@ -329,7 +327,7 @@ class MCR2CVL(nn.Module):
             return p_v, p_o, pair_pred
         return pair_pred
 
-    def train_forward_closed(self, x):
+    def train_forward_closed(self, x, verb_labels=None, obj_labels=None):
         img_feat = self._vit_feature_extractor_no_avg(x)  # (B, 768, 1, 14, 14)
         z_v, z_o, loss_flow = self.flow_matching(img_feat)
         z_v_mean = z_v.mean(dim=1)
@@ -363,12 +361,14 @@ class MCR2CVL(nn.Module):
         p_o = 0.5 * (p_o + p_comp_o)
 
         loss_comp = F.mse_loss(z_comp, 0.5 * (z_v_mean + z_o_mean))
-        loss_leak = z_v_mean.new_tensor(0.0)
-        if self.lambda_leak > 0:
-            loss_leak = self.flow_matching.leakage_flow_match(z_v, z_o)
-        loss_guide = z_v_mean.new_tensor(0.0)
-        if self.lambda_guide > 0:
-            loss_guide = self.flow_matching.bilateral_guide_loss(z_v_mean, z_o_mean)
+        loss_orth = z_v_mean.new_tensor(0.0)
+        if self.lambda_orth > 0:
+            loss_orth = self.flow_matching.orthogonal_flow_loss(
+                z_v_mean,
+                z_o_mean,
+                verb_labels=verb_labels,
+                obj_labels=obj_labels,
+            )
         loss_hyper_comp = z_v_mean.new_tensor(0.0)
         if self.lambda_hyper_comp > 0:
             loss_hyper_comp = self.hyper_projector.hyper_composition_loss(z_v_mean, z_o_mean)
@@ -379,18 +379,17 @@ class MCR2CVL(nn.Module):
         additional_loss = (
             self.lambda_flow * loss_flow
             + self.lambda_comp * loss_comp
-            + self.lambda_leak * loss_leak
-            + self.lambda_guide * loss_guide
+            + self.lambda_orth * loss_orth
             + self.lambda_hyper_comp * loss_hyper_comp
             + self.lambda_hyper_contrast * loss_hyper_contrast
         )
 
         return p_v, p_o, pred, additional_loss
 
-    def forward(self, x, pair=None):
+    def forward(self, x, pair=None, verb_labels=None, obj_labels=None):
         # x(64,3,224,224)
         if self.training:
-            pred = self.train_forward_closed(x)
+            pred = self.train_forward_closed(x, verb_labels=verb_labels, obj_labels=obj_labels)
         else:
             pred = self.val_forward_closed(x, pair)
         return pred

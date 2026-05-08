@@ -101,7 +101,11 @@ class Trainer:
                 
                 with self.accelerator.autocast():
                     # 检查模型返回
-                    model_output = self.model(batch_img)
+                    model_output = self.model(
+                        batch_img,
+                        verb_labels=batch_verb,
+                        obj_labels=batch_obj,
+                    )
                    
                     p_v, p_o, p_pred, additional_loss = model_output
 

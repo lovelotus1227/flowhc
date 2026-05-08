@@ -49,6 +49,37 @@ class CrossAttention(nn.Module):
         return self.proj_out(update)
 
 
+class FeatureRefinementAttention(nn.Module):
+    def __init__(self, dim, num_heads, dropout=0.1):
+        super().__init__()
+        self.norm_attn = nn.LayerNorm(dim)
+        self.attn = nn.MultiheadAttention(
+            embed_dim=dim,
+            num_heads=num_heads,
+            dropout=dropout,
+            batch_first=True,
+        )
+        self.attn_gate = nn.Sequential(
+            nn.LayerNorm(dim),
+            nn.Linear(dim, dim),
+            nn.Sigmoid(),
+        )
+        self.norm_ffn = nn.LayerNorm(dim)
+        self.ffn = nn.Sequential(
+            nn.Linear(dim, dim * 2),
+            nn.GELU(),
+            nn.Dropout(dropout),
+            nn.Linear(dim * 2, dim),
+        )
+
+    def forward(self, x):
+        x_norm = self.norm_attn(x)
+        attn_out, _ = self.attn(x_norm, x_norm, x_norm, need_weights=False)
+        x = x + self.attn_gate(x_norm) * attn_out
+        x = x + self.ffn(self.norm_ffn(x))
+        return x
+
+
 class FlowMatchingModule(nn.Module):
     def __init__(self, dim, num_heads, num_latents, num_layers, eta=None, is_image=False, num_frames=8):
         super().__init__()
@@ -97,6 +128,9 @@ class FlowMatchingModule(nn.Module):
             nn.Linear(1, dim),
             nn.SiLU(),
             nn.Linear(dim, dim),
+        )
+        self.feature_refiner = (
+            nn.Identity() if is_image else FeatureRefinementAttention(dim, num_heads)
         )
 
         self.norm_v = nn.LayerNorm(dim)
@@ -153,35 +187,47 @@ class FlowMatchingModule(nn.Module):
         loss_flow_o = F.mse_loss(v_pred_o, v_target_o)
         return 0.5 * (loss_flow_v + loss_flow_o)
 
-    def bilateral_guide_loss(self, z_v, z_o):
-        pred_o = self.flow_predictor_o(z_v)
-        pred_v = self.flow_predictor_v(z_o)
-        loss_o = F.mse_loss(pred_o, z_o)
-        loss_v = F.mse_loss(pred_v, z_v)
-        return 0.5 * (loss_v + loss_o)
-
     def contrastive_reg_loss(self, feat, labels, tau=0.1):
         feat = F.normalize(feat, dim=-1)
         sim = torch.matmul(feat, feat.transpose(-1, -2)) / tau
         return F.cross_entropy(sim, labels)
 
-    def leakage_flow_match(self, z_v, z_o):
-        batch_size = z_v.shape[0]
-        z_noise_v = torch.randn_like(z_v)
-        z_noise_o = torch.randn_like(z_o)
-        t = torch.rand(batch_size, 1, 1, device=z_v.device, dtype=z_v.dtype)
+    @staticmethod
+    def _different_label_orthogonal_loss(feat, labels):
+        if labels is None:
+            return feat.new_tensor(0.0)
 
-        z_t_v = (1 - t) * z_noise_v + t * z_v
-        v_pred_v_to_o = self.flow_predictor_o(self.add_time_condition(z_t_v, t))
-        v_target_v_to_o = z_o - z_noise_v
-        loss_mse_v_to_o = F.mse_loss(v_pred_v_to_o, v_target_v_to_o)
+        labels = labels.reshape(-1).to(device=feat.device)
+        if feat.shape[0] != labels.numel():
+            raise ValueError(
+                f"label count ({labels.numel()}) must match feature batch size ({feat.shape[0]})"
+            )
 
-        z_t_o = (1 - t) * z_noise_o + t * z_o
-        v_pred_o_to_v = self.flow_predictor_v(self.add_time_condition(z_t_o, t))
-        v_target_o_to_v = z_v - z_noise_o
-        loss_mse_o_to_v = F.mse_loss(v_pred_o_to_v, v_target_o_to_v)
+        feat = F.normalize(feat, dim=-1)
+        sim = torch.matmul(feat, feat.t())
+        different_label = labels.unsqueeze(0) != labels.unsqueeze(1)
+        off_diagonal = ~torch.eye(
+            labels.numel(),
+            dtype=torch.bool,
+            device=labels.device,
+        )
+        mask = different_label & off_diagonal
+        if not mask.any():
+            return feat.new_tensor(0.0)
+        return sim[mask].pow(2).mean()
 
-        return 0.5 * (loss_mse_v_to_o + loss_mse_o_to_v)
+    def orthogonal_flow_loss(self, z_v, z_o, verb_labels=None, obj_labels=None):
+        if z_v.dim() == 3:
+            z_v = z_v.mean(dim=1)
+        if z_o.dim() == 3:
+            z_o = z_o.mean(dim=1)
+
+        z_v = F.normalize(z_v, dim=-1)
+        z_o = F.normalize(z_o, dim=-1)
+        cross_branch = (z_v * z_o).sum(dim=-1).pow(2).mean()
+        verb_orth = self._different_label_orthogonal_loss(z_v, verb_labels)
+        obj_orth = self._different_label_orthogonal_loss(z_o, obj_labels)
+        return cross_branch + 0.5 * (verb_orth + obj_orth)
 
     def _flatten_encoder_output(self, x):
         effective_num_frames = self.num_frames
@@ -202,6 +248,7 @@ class FlowMatchingModule(nn.Module):
     def forward(self, x):
         x, effective_num_frames = self._flatten_encoder_output(x)
         x = self.add_temporal_pos_emb(x, effective_num_frames)
+        x = self.feature_refiner(x)
 
         batch_size = x.shape[0]
         z_v = self.latents_v.expand(batch_size, -1, -1)

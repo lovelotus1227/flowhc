@@ -27,8 +27,7 @@ model:
     is_image: false
     lambda_flow: 0.1
     lambda_comp: 0.1
-    lambda_leak: 0.0
-    lambda_guide: 0.05
+    lambda_orth: 0.03
     lambda_hyper_comp: 0.05
     lambda_hyper_contrast: 0.02
 train:

@@ -108,8 +108,7 @@ class MCR2CVL(nn.Module):
             num_frames=8,
             lambda_flow=0.1,
             lambda_comp=0.1,
-            lambda_leak=0.0,
-            lambda_guide=0.05,
+            lambda_orth=0.03,
             lambda_hyper_comp=0.05,
             lambda_hyper_contrast=0.02,
             composer_type="gated",
@@ -119,8 +118,7 @@ class MCR2CVL(nn.Module):
         super(MCR2CVL, self).__init__()
         self.lambda_flow = lambda_flow
         self.lambda_comp = lambda_comp
-        self.lambda_leak = lambda_leak
-        self.lambda_guide = lambda_guide
+        self.lambda_orth = lambda_orth
         self.lambda_hyper_comp = lambda_hyper_comp
         self.lambda_hyper_contrast = lambda_hyper_contrast
 
@@ -312,7 +310,7 @@ class MCR2CVL(nn.Module):
             return p_v, p_o, pair_pred
         return pair_pred
 
-    def train_forward_closed(self, x):
+    def train_forward_closed(self, x, verb_labels=None, obj_labels=None):
         if self.feat_extractor == "clip":
             vid_feat = self.video_encoder(x, output_format="flatten")
         else:
@@ -353,13 +351,14 @@ class MCR2CVL(nn.Module):
 
         loss_comp = F.mse_loss(z_comp, (z_v_mean + z_o_mean) * 0.5)
 
-        loss_leak = z_v_mean.new_tensor(0.0)
-        if self.lambda_leak > 0:
-            loss_leak = self.flow_matching.leakage_flow_match(z_v, z_o)
-
-        loss_guide = z_v_mean.new_tensor(0.0)
-        if self.lambda_guide > 0:
-            loss_guide = self.flow_matching.bilateral_guide_loss(z_v_mean, z_o_mean)
+        loss_orth = z_v_mean.new_tensor(0.0)
+        if self.lambda_orth > 0:
+            loss_orth = self.flow_matching.orthogonal_flow_loss(
+                z_v_mean,
+                z_o_mean,
+                verb_labels=verb_labels,
+                obj_labels=obj_labels,
+            )
 
         loss_hyper_comp = z_v_mean.new_tensor(0.0)
         if self.lambda_hyper_comp > 0:
@@ -372,15 +371,14 @@ class MCR2CVL(nn.Module):
         total_additional_loss = (
             self.lambda_flow * loss_flow
             + self.lambda_comp * loss_comp
-            + self.lambda_leak * loss_leak
-            + self.lambda_guide * loss_guide
+            + self.lambda_orth * loss_orth
             + self.lambda_hyper_comp * loss_hyper_comp
             + self.lambda_hyper_contrast * loss_hyper_contrast
         )
         return p_v, p_o, pred, total_additional_loss
 
-    def forward(self, x, pair=None):
+    def forward(self, x, pair=None, verb_labels=None, obj_labels=None):
         if self.training:
-            return self.train_forward_closed(x)
+            return self.train_forward_closed(x, verb_labels=verb_labels, obj_labels=obj_labels)
         else:
             return self.val_forward_closed(x, pair)
