@@ -375,6 +375,13 @@ class MCR2CVL(nn.Module):
             + self.lambda_hyper_comp * loss_hyper_comp
             + self.lambda_hyper_contrast * loss_hyper_contrast
         )
+        self.latest_loss_terms = {
+            "loss_flow": loss_flow.detach(),
+            "loss_comp_aux": loss_comp.detach(),
+            "loss_orth": loss_orth.detach(),
+            "loss_hyper_comp": loss_hyper_comp.detach(),
+            "loss_hyper_contrast": loss_hyper_contrast.detach(),
+        }
         return p_v, p_o, pred, total_additional_loss
 
     def forward(self, x, pair=None, verb_labels=None, obj_labels=None):

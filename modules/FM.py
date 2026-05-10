@@ -193,7 +193,7 @@ class FlowMatchingModule(nn.Module):
         return F.cross_entropy(sim, labels)
 
     @staticmethod
-    def _different_label_orthogonal_loss(feat, labels):
+    def _different_label_orthogonal_loss(feat, labels, margin=0.2):
         if labels is None:
             return feat.new_tensor(0.0)
 
@@ -214,9 +214,17 @@ class FlowMatchingModule(nn.Module):
         mask = different_label & off_diagonal
         if not mask.any():
             return feat.new_tensor(0.0)
-        return sim[mask].pow(2).mean()
+        return F.relu(sim[mask] - margin).pow(2).mean()
 
-    def orthogonal_flow_loss(self, z_v, z_o, verb_labels=None, obj_labels=None):
+    def orthogonal_flow_loss(
+            self,
+            z_v,
+            z_o,
+            verb_labels=None,
+            obj_labels=None,
+            branch_margin=0.1,
+            class_margin=0.2,
+    ):
         if z_v.dim() == 3:
             z_v = z_v.mean(dim=1)
         if z_o.dim() == 3:
@@ -224,9 +232,10 @@ class FlowMatchingModule(nn.Module):
 
         z_v = F.normalize(z_v, dim=-1)
         z_o = F.normalize(z_o, dim=-1)
-        cross_branch = (z_v * z_o).sum(dim=-1).pow(2).mean()
-        verb_orth = self._different_label_orthogonal_loss(z_v, verb_labels)
-        obj_orth = self._different_label_orthogonal_loss(z_o, obj_labels)
+        cross_sim = (z_v * z_o).sum(dim=-1).abs()
+        cross_branch = F.relu(cross_sim - branch_margin).pow(2).mean()
+        verb_orth = self._different_label_orthogonal_loss(z_v, verb_labels, class_margin)
+        obj_orth = self._different_label_orthogonal_loss(z_o, obj_labels, class_margin)
         return cross_branch + 0.5 * (verb_orth + obj_orth)
 
     def _flatten_encoder_output(self, x):

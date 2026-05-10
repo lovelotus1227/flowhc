@@ -139,6 +139,13 @@ class Trainer:
                                            additional_loss.item() if isinstance(additional_loss,
                                                                                 torch.Tensor) else additional_loss,
                                            epoch * len(self.train_dataloader) + step)
+                    raw_model = self.accelerator.unwrap_model(self.model)
+                    for name, value in getattr(raw_model, "latest_loss_terms", {}).items():
+                        self.writer.add_scalar(
+                            f"train/{name}",
+                            value.item() if isinstance(value, torch.Tensor) else value,
+                            epoch * len(self.train_dataloader) + step,
+                        )
                     self.writer.add_scalar("train/lr", self.optimizer.param_groups[0]["lr"],
                                            epoch * len(self.train_dataloader) + step)
 
